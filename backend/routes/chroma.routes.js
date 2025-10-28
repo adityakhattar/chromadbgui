@@ -7,6 +7,8 @@
 
 const chromaService = require('../services/customChroma.service');
 const { readLogs, getLogFiles, cleanupOldLogs } = require('../services/logger.service');
+const chunkingService = require('../services/chunking.service');
+const urlFetcherService = require('../services/url-fetcher.service');
 
 module.exports = function (app) {
   // ============================================
@@ -255,6 +257,144 @@ module.exports = function (app) {
         });
       }
     } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
+  /**
+   * POST /api/chroma/collections/:name/documents/url-fetch
+   * Fetch content from URL, optionally chunk it, and create documents
+   * Body: {
+   *   url: string,
+   *   baseId: string,
+   *   authToken: string (optional),
+   *   authType: string (optional: 'bearer', 'api-key', or custom),
+   *   enableChunking: boolean,
+   *   chunkingOptions: {
+   *     mode: 'semantic' or 'configurable',
+   *     chunkSize: number (for configurable mode),
+   *     overlap: number (for configurable mode)
+   *   },
+   *   baseMetadata: object (optional - additional metadata for all docs/chunks)
+   * }
+   */
+  app.post('/api/chroma/collections/:name/documents/url-fetch', async (req, res) => {
+    try {
+      const { name } = req.params;
+      const {
+        url,
+        baseId,
+        authToken,
+        authType,
+        enableChunking = false,
+        chunkingOptions = {},
+        baseMetadata = {},
+      } = req.body;
+
+      if (!name || !url || !baseId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Collection name, URL, and base ID are required',
+        });
+      }
+
+      // Step 1: Fetch content from URL
+      const fetchResult = await urlFetcherService.fetchURL(url, { authToken, authType });
+
+      if (!fetchResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: fetchResult.error,
+        });
+      }
+
+      // Step 2: Determine which documents to create
+      let documentsToCreate = [];
+
+      // Special handling for CSV (multiple rows)
+      if (fetchResult.type === 'csv' && fetchResult.documents.length > 0) {
+        // CSV: Each row is already a document
+        documentsToCreate = fetchResult.documents.map((doc, index) => ({
+          id: `${baseId}_row_${index + 1}`,
+          text: doc.text,
+          metadata: {
+            ...baseMetadata,
+            ...doc.metadata,
+            ...fetchResult.metadata,
+          },
+        }));
+      } else {
+        // For non-CSV: single document with optional chunking
+        const fullText = fetchResult.text;
+
+        if (enableChunking && fullText) {
+          // Apply chunking
+          const chunkedDocs = chunkingService.createChunkedDocuments(
+            baseId,
+            fullText,
+            chunkingOptions,
+            {
+              ...baseMetadata,
+              ...fetchResult.metadata,
+            }
+          );
+          documentsToCreate = chunkedDocs.map(doc => ({
+            id: doc.id,
+            text: doc.metadata.text || doc.text,
+            metadata: doc.metadata,
+          }));
+        } else {
+          // No chunking: single document
+          documentsToCreate = [{
+            id: baseId,
+            text: fullText,
+            metadata: {
+              ...baseMetadata,
+              ...fetchResult.metadata,
+            },
+          }];
+        }
+      }
+
+      // Step 3: Add documents to ChromaDB
+      if (documentsToCreate.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'No content to create documents from',
+        });
+      }
+
+      // Use batch add for efficiency
+      const batchResult = await chromaService.batchAddDocuments(
+        name,
+        documentsToCreate,
+        'id',
+        Object.keys(documentsToCreate[0].metadata)
+      );
+
+      if (batchResult.success) {
+        res.status(201).json({
+          success: true,
+          data: {
+            ...batchResult.data,
+            documentsCreated: documentsToCreate.length,
+            source: fetchResult.type,
+            sourceUrl: url,
+          },
+          message: `Successfully created ${documentsToCreate.length} document(s) from URL`,
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: batchResult.error,
+          data: batchResult.data,
+        });
+      }
+    } catch (error) {
+      console.error('URL fetch error:', error);
       res.status(500).json({
         success: false,
         error: error.message,

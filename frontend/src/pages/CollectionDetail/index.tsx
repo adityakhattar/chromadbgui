@@ -34,7 +34,20 @@ export default function CollectionDetail() {
   const [newDocId, setNewDocId] = useState('');
   const [newDocText, setNewDocText] = useState('');
   const [newDocMetadata, setNewDocMetadata] = useState<Array<{key: string, value: string}>>([]);
+  // URL fetching states
+  const [inputMode, setInputMode] = useState<'manual' | 'url'>('manual');
+  const [fetchUrl, setFetchUrl] = useState('');
+  const [authToken, setAuthToken] = useState('');
+  const [authType, setAuthType] = useState<'bearer' | 'api-key' | 'custom'>('bearer');
+  const [showAuth, setShowAuth] = useState(false);
+  const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+  // Chunking states
+  const [enableChunking, setEnableChunking] = useState(false);
+  const [chunkingMode, setChunkingMode] = useState<'semantic' | 'configurable'>('configurable');
+  const [chunkSize, setChunkSize] = useState(500);
+  const [chunkOverlap, setChunkOverlap] = useState(50);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [filterByParentDoc, setFilterByParentDoc] = useState<string | null>(null);
   const [queryTopK, setQueryTopK] = useState(10);
   const [queryMetadata, setQueryMetadata] = useState('');
   const [queryResults, setQueryResults] = useState<any>(null);
@@ -76,7 +89,13 @@ export default function CollectionDetail() {
   useEffect(() => {
     // Filter documents based on search query
     let result = documents;
-    if (searchQuery.trim() !== '') {
+
+    // Filter by parent document ID if set
+    if (filterByParentDoc) {
+      result = documents.filter((doc) => {
+        return doc.metadata?.parent_doc_id === filterByParentDoc;
+      });
+    } else if (searchQuery.trim() !== '') {
       const query = searchQuery.toLowerCase();
       result = documents.filter((doc) => {
         const idMatch = doc.id.toLowerCase().includes(query);
@@ -103,7 +122,7 @@ export default function CollectionDetail() {
 
     setFilteredDocuments(result);
     setCurrentPage(1); // Reset to first page on search/sort
-  }, [searchQuery, documents, sortBy]);
+  }, [searchQuery, documents, sortBy, filterByParentDoc]);
 
   async function fetchDocuments() {
     try {
@@ -236,63 +255,132 @@ export default function CollectionDetail() {
     }
 
     try {
-      // Convert metadata array to object, keeping all values as strings
-      const metadataObj: Record<string, string> = {};
-      newDocMetadata.forEach(item => {
-        if (item.key.trim()) {
-          metadataObj[item.key.trim()] = item.value;
+      if (inputMode === 'url') {
+        // URL-based creation with fetching
+        if (!fetchUrl.trim()) {
+          toast.error('Please enter a URL');
+          return;
         }
-      });
 
-      // If no metadata provided, add a default metadata field (required by API)
-      const finalMetadata = Object.keys(metadataObj).length > 0
-        ? metadataObj
-        : { doc_type: 'user_created' };
+        setIsFetchingUrl(true);
 
-      const documentData = {
-        id: newDocId.trim(),
-        document: newDocText.trim(),
-        ...finalMetadata, // Add metadata fields directly to document
-      };
+        // Prepare base metadata from key-value pairs
+        const baseMetadata: Record<string, string> = {};
+        newDocMetadata.forEach(item => {
+          if (item.key.trim()) {
+            baseMetadata[item.key.trim()] = item.value;
+          }
+        });
 
-      // Get metadata field names for the metadata array
-      const metadataFieldNames = Object.keys(finalMetadata);
-
-      const response = await fetch(
-        `${API_BASE}/api/chroma/collections/${encodeURIComponent(name!)}/documents`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            idField: 'id',
-            document: documentData,
-            metadata: metadataFieldNames, // Array of field names, not JSON strings
-            additionalParams: {
-              resource_id: newDocId.trim(),
-              resource_type: 'document',
-              event_type: 'add',
-            },
+        // Prepare chunking options
+        const chunkingOptions = enableChunking ? {
+          mode: chunkingMode,
+          ...(chunkingMode === 'configurable' && {
+            chunkSize: chunkSize,
+            overlap: chunkOverlap,
           }),
-        }
-      );
+        } : undefined;
 
-      if (response.ok) {
-        toast.success('Document created successfully');
-        setShowCreateModal(false);
-        setNewDocId('');
-        setNewDocText('');
-        setNewDocMetadata([]);
-        setDeleteConfirmText('');  // Clear delete confirmation
-        fetchDocuments();
+        const response = await fetch(
+          `${API_BASE}/api/chroma/collections/${encodeURIComponent(name!)}/documents/url-fetch`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: fetchUrl.trim(),
+              baseId: newDocId.trim(),
+              authToken: showAuth && authToken ? authToken : undefined,
+              authType: showAuth && authToken ? authType : undefined,
+              enableChunking: enableChunking,
+              chunkingOptions: chunkingOptions,
+              baseMetadata: baseMetadata,
+            }),
+          }
+        );
+
+        setIsFetchingUrl(false);
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          toast.success(result.message || 'Documents created from URL successfully');
+          resetCreateModal();
+          fetchDocuments();
+        } else {
+          toast.error(result.error || 'Failed to fetch and create documents from URL');
+        }
       } else {
-        const data = await response.json();
-        const errorMessage = data.error || data.message || 'Failed to create document';
-        toast.error(`Document creation failed: ${errorMessage}`);
+        // Manual text creation (existing logic)
+        // Convert metadata array to object
+        const metadataObj: Record<string, string> = {};
+        newDocMetadata.forEach(item => {
+          if (item.key.trim()) {
+            metadataObj[item.key.trim()] = item.value;
+          }
+        });
+
+        // If no metadata provided, add a default metadata field (required by API)
+        const finalMetadata = Object.keys(metadataObj).length > 0
+          ? metadataObj
+          : { doc_type: 'user_created' };
+
+        const documentData = {
+          id: newDocId.trim(),
+          document: newDocText.trim(),
+          ...finalMetadata,
+        };
+
+        const metadataFieldNames = Object.keys(finalMetadata);
+
+        const response = await fetch(
+          `${API_BASE}/api/chroma/collections/${encodeURIComponent(name!)}/documents`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              idField: 'id',
+              document: documentData,
+              metadata: metadataFieldNames,
+              additionalParams: {
+                resource_id: newDocId.trim(),
+                resource_type: 'document',
+                event_type: 'add',
+              },
+            }),
+          }
+        );
+
+        if (response.ok) {
+          toast.success('Document created successfully');
+          resetCreateModal();
+          fetchDocuments();
+        } else {
+          const data = await response.json();
+          const errorMessage = data.error || data.message || 'Failed to create document';
+          toast.error(`Document creation failed: ${errorMessage}`);
+        }
       }
     } catch (err) {
+      setIsFetchingUrl(false);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       toast.error(`Error creating document: ${errorMessage}`);
     }
+  }
+
+  // Helper function to reset create modal state
+  function resetCreateModal() {
+    setShowCreateModal(false);
+    setNewDocId('');
+    setNewDocText('');
+    setNewDocMetadata([]);
+    setInputMode('manual');
+    setFetchUrl('');
+    setAuthToken('');
+    setShowAuth(false);
+    setEnableChunking(false);
+    setChunkingMode('configurable');
+    setChunkSize(500);
+    setChunkOverlap(50);
   }
 
   async function handleSearch() {
@@ -778,6 +866,29 @@ export default function CollectionDetail() {
             </span>
           </div>
 
+          {/* Filter Banner */}
+          {filterByParentDoc && (
+            <div className="mb-4 rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg className="h-5 w-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                <span className="text-sm text-purple-300">
+                  Showing chunks from parent document: <span className="font-mono text-purple-200">{filterByParentDoc}</span>
+                </span>
+              </div>
+              <button
+                onClick={() => setFilterByParentDoc(null)}
+                className="flex items-center gap-1 rounded-lg bg-purple-500/20 px-3 py-1 text-sm text-purple-300 hover:bg-purple-500/30 transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Clear Filter
+              </button>
+            </div>
+          )}
+
           {loading && (
             <div className="text-center text-gray-400 py-8">Loading documents...</div>
           )}
@@ -806,7 +917,34 @@ export default function CollectionDetail() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-mono text-cyan-400 mb-2">{doc.id}</p>
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="text-sm font-mono text-cyan-400">{doc.id}</p>
+                          {/* Chunk relationship badge */}
+                          {doc.metadata?.parent_doc_id && doc.metadata?.chunk_index && doc.metadata?.total_chunks && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFilterByParentDoc(doc.metadata.parent_doc_id);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 px-2 py-0.5 text-xs font-medium text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 hover:border-purple-500/40 transition-colors"
+                              title="View all chunks"
+                            >
+                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Part {doc.metadata.chunk_index} of {doc.metadata.total_chunks}
+                            </button>
+                          )}
+                          {/* CSV row badge */}
+                          {doc.metadata?.row_index && doc.metadata?.doc_type === 'csv_row' && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400 border border-green-500/20">
+                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                              Row {doc.metadata.row_index}
+                            </span>
+                          )}
+                        </div>
                         {doc.text && (
                           <p className="text-sm text-gray-300 line-clamp-2">{doc.text}</p>
                         )}
@@ -1125,8 +1263,8 @@ export default function CollectionDetail() {
 
       {/* Create Document Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="max-w-2xl w-full rounded-lg border border-white/10 bg-zinc-900 p-6 m-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 overflow-y-auto p-4">
+          <div className="max-w-3xl w-full rounded-lg border border-white/10 bg-zinc-900 p-6 my-8">
             <h3 className="text-xl font-semibold text-white mb-4">Create New Document</h3>
 
             <div className="space-y-4 mb-6">
@@ -1142,17 +1280,207 @@ export default function CollectionDetail() {
                 />
               </div>
 
-              {/* Document Text */}
+              {/* Input Mode Selection */}
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Document Text</label>
-                <textarea
-                  placeholder="Enter document content..."
-                  value={newDocText}
-                  onChange={(e) => setNewDocText(e.target.value)}
-                  rows={5}
-                  className="w-full rounded-lg border border-white/10 bg-zinc-800 px-4 py-2 text-white placeholder-gray-500 focus:border-cyan-500/50 focus:outline-none resize-y"
-                />
+                <label className="block text-sm text-gray-400 mb-2">Input Mode</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="manual"
+                      checked={inputMode === 'manual'}
+                      onChange={(e) => setInputMode(e.target.value as 'manual' | 'url')}
+                      className="text-cyan-500 focus:ring-cyan-500"
+                    />
+                    <span className="text-white">Enter Text Manually</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="url"
+                      checked={inputMode === 'url'}
+                      onChange={(e) => setInputMode(e.target.value as 'manual' | 'url')}
+                      className="text-cyan-500 focus:ring-cyan-500"
+                    />
+                    <span className="text-white">Fetch from URL</span>
+                  </label>
+                </div>
               </div>
+
+              {/* Manual Text Input */}
+              {inputMode === 'manual' && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Document Text</label>
+                  <textarea
+                    placeholder="Enter document content..."
+                    value={newDocText}
+                    onChange={(e) => setNewDocText(e.target.value)}
+                    rows={5}
+                    className="w-full rounded-lg border border-white/10 bg-zinc-800 px-4 py-2 text-white placeholder-gray-500 focus:border-cyan-500/50 focus:outline-none resize-y"
+                  />
+                </div>
+              )}
+
+              {/* URL Input */}
+              {inputMode === 'url' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">URL *</label>
+                    <input
+                      type="url"
+                      placeholder="https://example.com/document.html"
+                      value={fetchUrl}
+                      onChange={(e) => setFetchUrl(e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-zinc-800 px-4 py-2 text-white placeholder-gray-500 focus:border-cyan-500/50 focus:outline-none"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Supports: HTML, Markdown, Text, CSV, JSON files
+                    </p>
+                  </div>
+
+                  {/* Authentication Toggle */}
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showAuth}
+                        onChange={(e) => setShowAuth(e.target.checked)}
+                        className="text-cyan-500 focus:ring-cyan-500 rounded"
+                      />
+                      <span className="text-sm text-gray-300">This URL requires authentication</span>
+                    </label>
+                  </div>
+
+                  {/* Auth Fields */}
+                  {showAuth && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-6 border-l-2 border-cyan-500/30">
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Auth Type</label>
+                        <select
+                          value={authType}
+                          onChange={(e) => setAuthType(e.target.value as 'bearer' | 'api-key' | 'custom')}
+                          className="w-full rounded-lg border border-white/10 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-cyan-500/50 focus:outline-none"
+                        >
+                          <option value="bearer">Bearer Token</option>
+                          <option value="api-key">API Key</option>
+                          <option value="custom">Custom Header</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Token/Key</label>
+                        <input
+                          type="password"
+                          placeholder="Enter auth token..."
+                          value={authToken}
+                          onChange={(e) => setAuthToken(e.target.value)}
+                          className="w-full rounded-lg border border-white/10 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-cyan-500/50 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Chunking Toggle */}
+              {(inputMode === 'manual' && newDocText.length > 0) || inputMode === 'url' ? (
+                <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                  <label className="flex items-center gap-2 cursor-pointer mb-3">
+                    <input
+                      type="checkbox"
+                      checked={enableChunking}
+                      onChange={(e) => setEnableChunking(e.target.checked)}
+                      className="text-cyan-500 focus:ring-cyan-500 rounded"
+                    />
+                    <span className="text-white font-medium">Enable Document Chunking</span>
+                  </label>
+
+                  {enableChunking && (
+                    <div className="space-y-3 pl-6 border-l-2 border-cyan-500/30">
+                      {/* Chunking Mode */}
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-2">Chunking Mode</label>
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              value="semantic"
+                              checked={chunkingMode === 'semantic'}
+                              onChange={(e) => setChunkingMode(e.target.value as 'semantic' | 'configurable')}
+                              className="text-cyan-500 focus:ring-cyan-500"
+                            />
+                            <span className="text-sm text-white">Semantic (by paragraphs)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              value="configurable"
+                              checked={chunkingMode === 'configurable'}
+                              onChange={(e) => setChunkingMode(e.target.value as 'semantic' | 'configurable')}
+                              className="text-cyan-500 focus:ring-cyan-500"
+                            />
+                            <span className="text-sm text-white">Configurable (size + overlap)</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Configurable Options */}
+                      {chunkingMode === 'configurable' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Chunk Size */}
+                          <div>
+                            <label className="block text-sm text-gray-400 mb-2">
+                              Chunk Size: <span className="text-cyan-400">{chunkSize}</span> chars
+                            </label>
+                            <input
+                              type="number"
+                              min="100"
+                              max="5000"
+                              step="100"
+                              value={chunkSize}
+                              onChange={(e) => setChunkSize(Number(e.target.value))}
+                              className="w-full mb-2 rounded-lg border border-white/10 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-cyan-500/50 focus:outline-none"
+                            />
+                            <input
+                              type="range"
+                              min="100"
+                              max="5000"
+                              step="100"
+                              value={chunkSize}
+                              onChange={(e) => setChunkSize(Number(e.target.value))}
+                              className="w-full"
+                            />
+                          </div>
+
+                          {/* Overlap */}
+                          <div>
+                            <label className="block text-sm text-gray-400 mb-2">
+                              Overlap: <span className="text-cyan-400">{chunkOverlap}</span> chars
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="500"
+                              step="10"
+                              value={chunkOverlap}
+                              onChange={(e) => setChunkOverlap(Number(e.target.value))}
+                              className="w-full mb-2 rounded-lg border border-white/10 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-cyan-500/50 focus:outline-none"
+                            />
+                            <input
+                              type="range"
+                              min="0"
+                              max="500"
+                              step="10"
+                              value={chunkOverlap}
+                              onChange={(e) => setChunkOverlap(Number(e.target.value))}
+                              className="w-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
 
               {/* Metadata Fields */}
               <div>
@@ -1210,21 +1538,24 @@ export default function CollectionDetail() {
 
             <div className="flex gap-3 justify-end">
               <button
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setNewDocId('');
-                  setNewDocText('');
-                  setNewDocMetadata([]);
-                }}
-                className="rounded-lg border border-white/10 bg-dark-background px-4 py-2 text-white transition-all hover:border-white/20"
+                onClick={resetCreateModal}
+                disabled={isFetchingUrl}
+                className="rounded-lg border border-white/10 bg-dark-background px-4 py-2 text-white transition-all hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreateDocument}
-                className="rounded-lg bg-cyan-500 px-4 py-2 text-white transition-all hover:bg-cyan-600"
+                disabled={isFetchingUrl}
+                className="rounded-lg bg-cyan-500 px-4 py-2 text-white transition-all hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Create
+                {isFetchingUrl && (
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                {isFetchingUrl ? 'Fetching...' : 'Create'}
               </button>
             </div>
           </div>

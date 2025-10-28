@@ -1,0 +1,299 @@
+/**
+ * ChromaGUI Theme System
+ *
+ * This file is the SINGLE SOURCE OF TRUTH for all colors, animations, spacing,
+ * and visual values in the application. All hardcoded values should reference
+ * these CSS custom properties to enable easy theme customization.
+ *
+ * IMPORTANT: After changing values, restart the dev server for changes to take effect.
+ *
+ * ============================================================================
+ * USAGE GUIDE
+ * ============================================================================
+ *
+ * 1. IN CSS/TAILWIND:
+ *    - Use standard Tailwind classes when possible (bg-cyan-500, text-white, etc.)
+ *    - For custom values, use arbitrary values: bg-[var(--color-primary)]
+ *    - Example: className="bg-[var(--color-bg-main)] text-[var(--color-text-primary)]"
+ *
+ * 2. IN JAVASCRIPT/TYPESCRIPT:
+ *    - Import theme utilities: import { getChartColors, animationDurations } from '@/utils/theme';
+ *    - Use functions to access values: const colors = getChartColors();
+ *    - For animations: transition={{ delay: animationDelays.small() }}
+ *
+ * 3. ADDING NEW VALUES:
+ *    - Add new CSS variables in the appropriate section below
+ *    - Update /utils/theme.ts if the value needs JavaScript access
+ *    - Document the variable with a clear comment
+ *
+ * ============================================================================
+ */
+
+:root {
+  /* ========================================
+   * PRIMARY COLORS
+   * Used for: Buttons, links, active states, accents
+   * ======================================== */
+  --color-primary: #06b6d4;           /* Cyan-500 - Main accent color */
+  --color-primary-hover: #0891b2;     /* Cyan-600 - Hover state */
+  --color-primary-light: #67e8f9;     /* Cyan-300 - Light variant */
+  --color-primary-dark: #0e7490;      /* Cyan-700 - Dark variant */
+
+  /* ========================================
+   * BACKGROUND COLORS
+   * Used for: Page backgrounds, panels, cards, inputs
+   * ======================================== */
+  --color-bg-main: #09090b;           /* Zinc-950 - Main page background */
+  --color-bg-dark: #18181b;           /* Zinc-900 - Modals, sticky headers */
+  --color-bg-card: #27272a;           /* Zinc-800 - Cards, inputs */
+  --color-bg-hover: #3f3f46;          /* Zinc-700 - Hover states */
+  --color-bg-active: #52525b;         /* Zinc-600 - Active/selected states */
+
+  /* ========================================
+   * TEXT COLORS
+   * Used for: All text content
+   * ======================================== */
+  --color-text-primary: #fafafa;      /* Zinc-50 - Headings, important text */
+  --color-text-secondary: #d4d4d8;    /* Zinc-300 - Body text */
+  --color-text-tertiary: #a1a1aa;     /* Zinc-400 - Muted text */
+  --color-text-disabled: #71717a;     /* Zinc-500 - Disabled text */
+  --color-text-inverse: #18181b;      /* Zinc-900 - Text on light backgrounds */
+
+  /* ========================================
+   * ACCENT COLORS (Alternative to primary)
+   * Currently using cyan, but can be changed to any color
+   * ======================================== */
+  --color-accent-primary: #06b6d4;    /* Cyan-500 */
+  --color-accent-secondary: #3b82f6;  /* Blue-500 */
+  --color-accent-tertiary: #8b5cf6;   /* Purple-500 */
+
+  /* ========================================
+   * STATUS COLORS
+   * Used for: Alerts, notifications, feedback
+   * ======================================== */
+  --color-success: #22c55e;           /* Green-500 - Success messages */
+  --color-success-light: #86efac;     /* Green-300 - Success light variant */
+  --color-success-dark: #16a34a;      /* Green-600 - Success dark variant */
+
+  --color-warning: #f59e0b;           /* Amber-500 - Warning messages */
+  --color-warning-light: #fcd34d;     /* Amber-300 - Warning light variant */
+  --color-warning-dark: #d97706;      /* Amber-600 - Warning dark variant */
+
+  --color-error: #ef4444;             /* Red-500 - Error messages */
+  --color-error-light: #fca5a5;       /* Red-300 - Error light variant */
+  --color-error-dark: #dc2626;        /* Red-600 - Error dark variant */
+
+  --color-info: #3b82f6;              /* Blue-500 - Info messages */
+  --color-info-light: #93c5fd;        /* Blue-300 - Info light variant */
+  --color-info-dark: #2563eb;         /* Blue-600 - Info dark variant */
+
+  /* ========================================
+   * BORDER COLORS
+   * Used for: Borders, dividers, outlines
+   * ======================================== */
+  --color-border-default: rgba(255, 255, 255, 0.1);   /* White 10% */
+  --color-border-light: rgba(255, 255, 255, 0.05);    /* White 5% */
+  --color-border-medium: rgba(255, 255, 255, 0.2);    /* White 20% */
+  --color-border-hover: rgba(6, 182, 212, 0.5);       /* Cyan-500 50% */
+  --color-border-focus: rgba(6, 182, 212, 0.5);       /* Cyan-500 50% */
+
+  /* ========================================
+   * SHADOW COLORS
+   * Used for: Box shadows, glows, elevation
+   * ======================================== */
+  --color-shadow-glow: rgba(6, 182, 212, 0.1);        /* Cyan 10% - Subtle glow */
+  --color-shadow-glow-hover: rgba(6, 182, 212, 0.2);  /* Cyan 20% - Hover glow */
+  --color-shadow-glow-strong: rgba(6, 182, 212, 0.3); /* Cyan 30% - Strong glow */
+  --color-shadow-dark: rgba(0, 0, 0, 0.5);            /* Black 50% */
+
+  /* ========================================
+   * CHART COLORS
+   * Used for: Analytics charts, graphs, visualizations
+   * ======================================== */
+  --color-chart-1: #06b6d4;           /* Cyan-500 */
+  --color-chart-2: #3b82f6;           /* Blue-500 */
+  --color-chart-3: #8b5cf6;           /* Purple-500 */
+  --color-chart-4: #ec4899;           /* Pink-500 */
+  --color-chart-5: #f59e0b;           /* Amber-500 */
+  --color-chart-6: #22c55e;           /* Green-500 */
+  --color-chart-7: #ef4444;           /* Red-500 */
+  --color-chart-8: #64748b;           /* Slate-500 */
+
+  /* ========================================
+   * SHADOW VALUES
+   * Predefined shadow combinations
+   * ======================================== */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-glow-sm: 0 0 10px var(--color-shadow-glow);
+  --shadow-glow-md: 0 0 20px var(--color-shadow-glow-hover);
+  --shadow-glow-lg: 0 0 30px var(--color-shadow-glow-strong);
+
+  /* ========================================
+   * SPACING VALUES
+   * Consistent spacing throughout the app
+   * ======================================== */
+  --spacing-xs: 0.25rem;    /* 4px */
+  --spacing-sm: 0.5rem;     /* 8px */
+  --spacing-md: 1rem;       /* 16px */
+  --spacing-lg: 1.5rem;     /* 24px */
+  --spacing-xl: 2rem;       /* 32px */
+  --spacing-2xl: 3rem;      /* 48px */
+  --spacing-3xl: 4rem;      /* 64px */
+
+  /* ========================================
+   * BORDER RADIUS VALUES
+   * Consistent rounding throughout the app
+   * ======================================== */
+  --radius-sm: 0.25rem;     /* 4px */
+  --radius-md: 0.5rem;      /* 8px - Most common */
+  --radius-lg: 0.75rem;     /* 12px */
+  --radius-xl: 1rem;        /* 16px */
+  --radius-full: 9999px;    /* Fully rounded */
+
+  /* ========================================
+   * TRANSITION DURATIONS
+   * Consistent animation timings
+   * ======================================== */
+  --transition-fast: 150ms;
+  --transition-normal: 300ms;
+  --transition-slow: 500ms;
+
+  /* ========================================
+   * ANIMATION SETTINGS
+   * Framer Motion and CSS animation values
+   * ======================================== */
+  --anim-duration-instant: 0.1;     /* 100ms - Very quick transitions */
+  --anim-duration-fast: 0.15;       /* 150ms - Fast animations */
+  --anim-duration-normal: 0.2;      /* 200ms - Default animation speed */
+  --anim-duration-medium: 0.3;      /* 300ms - Medium animations */
+  --anim-duration-slow: 0.5;        /* 500ms - Slow animations */
+
+  --anim-delay-none: 0;             /* No delay */
+  --anim-delay-tiny: 0.05;          /* 50ms - Tiny stagger delay */
+  --anim-delay-small: 0.1;          /* 100ms - Small delay */
+  --anim-delay-medium: 0.2;         /* 200ms - Medium delay */
+  --anim-delay-large: 0.3;          /* 300ms - Large delay */
+
+  --anim-stagger-items: 0.05;       /* 50ms - Delay between list items */
+  --anim-stagger-cards: 0.1;        /* 100ms - Delay between cards */
+
+  /* Animation distance (for slide animations) */
+  --anim-distance-sm: 10px;         /* Small movement */
+  --anim-distance-md: 20px;         /* Medium movement */
+  --anim-distance-lg: 30px;         /* Large movement */
+
+  /* Hover effects */
+  --anim-hover-scale: 1.02;         /* Slight scale on hover */
+  --anim-hover-scale-large: 1.05;   /* Larger scale on hover */
+  --anim-hover-lift: -4px;          /* Lift distance on hover */
+  --anim-tap-scale: 0.98;           /* Scale down when clicked */
+
+  /* ========================================
+   * TYPOGRAPHY
+   * Font sizes and weights
+   * ======================================== */
+  --font-size-xs: 0.75rem;      /* 12px */
+  --font-size-sm: 0.875rem;     /* 14px */
+  --font-size-base: 1rem;       /* 16px */
+  --font-size-lg: 1.125rem;     /* 18px */
+  --font-size-xl: 1.25rem;      /* 20px */
+  --font-size-2xl: 1.5rem;      /* 24px */
+  --font-size-3xl: 1.875rem;    /* 30px */
+  --font-size-4xl: 2.25rem;     /* 36px */
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ========================================
+   * Z-INDEX SCALE
+   * Consistent layering
+   * ======================================== */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+}
+
+/* ========================================
+ * UTILITY CLASSES
+ * Apply theme colors directly
+ * ======================================== */
+
+.bg-theme-main {
+  background-color: var(--color-bg-main);
+}
+
+.bg-theme-dark {
+  background-color: var(--color-bg-dark);
+}
+
+.bg-theme-card {
+  background-color: var(--color-bg-card);
+}
+
+.text-theme-primary {
+  color: var(--color-text-primary);
+}
+
+.text-theme-secondary {
+  color: var(--color-text-secondary);
+}
+
+.border-theme-default {
+  border-color: var(--color-border-default);
+}
+
+.border-theme-hover {
+  border-color: var(--color-border-hover);
+}
+
+/* ========================================
+ * JAVASCRIPT ACCESSIBLE VALUES
+ * Use getComputedStyle to access these in JS/TS
+ * Example: getComputedStyle(document.documentElement).getPropertyValue('--color-chart-1')
+ * ======================================== */
+
+/* Export chart colors as array-accessible values */
+:root {
+  --chart-color-0: var(--color-chart-1);
+  --chart-color-1: var(--color-chart-2);
+  --chart-color-2: var(--color-chart-3);
+  --chart-color-3: var(--color-chart-4);
+  --chart-color-4: var(--color-chart-5);
+  --chart-color-5: var(--color-chart-6);
+  --chart-color-6: var(--color-chart-7);
+  --chart-color-7: var(--color-chart-8);
+}
+
+/* ========================================
+ * COLOR CUSTOMIZATION EXAMPLES
+ * ========================================
+ *
+ * To change the accent color from cyan to purple:
+ * --color-primary: #8b5cf6;           (Purple-500)
+ * --color-primary-hover: #7c3aed;     (Purple-600)
+ * --color-primary-light: #c4b5fd;     (Purple-300)
+ *
+ * To change to orange:
+ * --color-primary: #f97316;           (Orange-500)
+ * --color-primary-hover: #ea580c;     (Orange-600)
+ * --color-primary-light: #fdba74;     (Orange-300)
+ *
+ * To change to green:
+ * --color-primary: #22c55e;           (Green-500)
+ * --color-primary-hover: #16a34a;     (Green-600)
+ * --color-primary-light: #86efac;     (Green-300)
+ *
+ * To change to blue:
+ * --color-primary: #3b82f6;           (Blue-500)
+ * --color-primary-hover: #2563eb;     (Blue-600)
+ * --color-primary-light: #93c5fd;     (Blue-300)
+ *
+ * ========================================
+ */
